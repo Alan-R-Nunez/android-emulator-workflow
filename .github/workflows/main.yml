@@ -45,6 +45,7 @@ jobs:
       - name: Start emulator
         run: |
           adb start-server
+          $ANDROID_HOME/emulator/emulator -avd -list-avds
           $ANDROID_HOME/emulator/emulator -avd $EMULATOR_NAME -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim &
           adb wait-for-device
           boot_completed=""
