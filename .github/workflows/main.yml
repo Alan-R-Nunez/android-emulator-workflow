@@ -41,6 +41,7 @@ jobs:
           export ANDROID_HOME=$HOME/android/sdk
           export PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/tools/bin
           mkdir -p $ANDROID_HOME
+          echo $ANDROID_HOME/emulator/emulator -avd -list-avds
 
       - name: Start emulator
         run: |
