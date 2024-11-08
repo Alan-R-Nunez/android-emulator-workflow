@@ -42,4 +42,30 @@ jobs:
           export PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/tools/bin
           mkdir -p $ANDROID_HOME
 
+      - name: Start emulator
+        run: |
+          adb start-server
+          emulator -avd $EMULATOR_NAME -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim &
+          adb wait-for-device
+          boot_completed=""
+          timeout=600
+          while [[ -z "$boot_completed" && $timeout -gt 0 ]]; do
+            boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [[ "$boot_completed" != "1" ]]; then
+              sleep 5
+              timeout=$((timeout - 5))
+            fi
+          done
+          if [[ "$boot_completed" != "1" ]]; then
+            echo "Emulator failed to boot within the timeout period."
+            exit 1
+          fi
+      - name: Build and run tests
+        run: |
+          ./gradlew assembleDebug
+          ./gradlew connectedAndroidTest
+
+      - name: Stop emulator
+        run: adb emu kill
+
 
