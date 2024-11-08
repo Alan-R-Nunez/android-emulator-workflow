@@ -11,55 +11,58 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      API_LEVEL: 30                   # Change this to your target API level
-      TARGET: google_apis              # Use google_apis or google_apis_playstore
-      ABI: x86_64                      # x86_64 is generally preferred for CI
+      API_LEVEL: 30
+      TARGET: google_apis
+      ABI: x86_64
       EMULATOR_NAME: test_emulator
 
     steps:
-    # Step 1: Checkout the code
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    # Step 2: Set up Java (required for Android SDK)
-    - name: Set up JDK 11
-      uses: actions/setup-java@v2
-      with:
-        distribution: 'zulu'
-        java-version: '11'
+      - name: Set up JDK 11
+        uses: actions/setup-java@v2
+        with:
+          distribution: 'zulu'
+          java-version: '11'
 
-    # Step 3: Set up the Android SDK
-    - name: Set up Android SDK
-      uses: android-actions/setup-android@v2
-      with:
-        api-level: ${{ env.API_LEVEL }}
-        target: ${{ env.TARGET }}
-        arch: ${{ env.ABI }}
-        profile: 'default'
-        emulator-name: ${{ env.EMULATOR_NAME }}
-        force-create: true    # Ensures a fresh emulator instance
-        disable-animations: true
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v2
+        with:
+          api-level: ${{ env.API_LEVEL }}
+          target: ${{ env.TARGET }}
+          arch: ${{ env.ABI }}
+          emulator-name: ${{ env.EMULATOR_NAME }}
+          force-create: true
+          disable-animations: true
 
-    # Step 4: Start the emulator
-    - name: Start emulator
-      run: |
-        adb start-server
-        emulator -avd $EMULATOR_NAME -no-snapshot -no-window -gpu swiftshader_indirect -no-boot-anim &
-        adb wait-for-device
-        adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
-        adb shell input keyevent 82  # Unlocks the emulator screen
+      - name: Add Android SDK tools to PATH
+        run: echo "::add-path::${ANDROID_HOME}/emulator"
 
-    # Step 5: Install dependencies and build the project
-    - name: Install dependencies and build
-      run: |
-        ./gradlew assembleDebug
+      - name: Start emulator
+        run: |
+          adb start-server
+          emulator -avd $EMULATOR_NAME -no-snapshot -no-window -gpu swiftshader_indirect -no-boot-anim &
+          adb wait-for-device
+          boot_completed=""
+          timeout=600
+          while [[ -z "$boot_completed" && $timeout -gt 0 ]]; do
+            boot_completed=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+            if [[ "$boot_completed" != "1" ]]; then
+              sleep 5
+              timeout=$((timeout - 5))
+            fi
+          done
+          if [[ "$boot_completed" != "1" ]]; then
+            echo "Emulator failed to boot within the timeout period."
+            exit 1
+          fi
+          adb shell input keyevent 82  # Unlocks the emulator screen
 
-    # Step 6: Run tests on the emulator
-    - name: Run UI tests
-      run: |
-        ./gradlew connectedAndroidTest
+      - name: Build and run tests
+        run: |
+          ./gradlew assembleDebug
+          ./gradlew connectedAndroidTest
 
-    # Step 7: Stop the emulator
-    - name: Stop emulator
-      run: |
-        adb emu kill
+      - name: Stop emulator
+        run: adb emu kill
