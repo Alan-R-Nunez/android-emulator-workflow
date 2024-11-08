@@ -1,37 +1,65 @@
-name: Android emulator 2.1
+name: Android CI
+
 on:
-  'push':
-    
-env:
-  ANDROID_ARCH: x86_64
-  ANDROID_TARGET: google_apis_playstore
-  API_LEVEL: 33
-  ANDROID_BUILD_TOOLS_VERSION: 33.0.2
-  ANDROID_SDK_PACKAGES: system-images;android-33;google_apis_playstore;x86_64 platforms;android-33 build-tools;33.0.2 platform-tools emulator
-  EMULATOR_TIMEOUT: 350
-  EMULATOR_NAME: nexus
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  playwright-emulator:
-    timeout-minutes: 20
-    runs-on: macos-latest
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      API_LEVEL: 30                   # Change this to your target API level
+      TARGET: google_apis              # Use google_apis or google_apis_playstore
+      ABI: x86_64                      # x86_64 is generally preferred for CI
+      EMULATOR_NAME: test_emulator
+
     steps:
-      - uses: actions/checkout@v3
-        
-      - name: Add avdmanager and sdkmanager to system PATH
-        run: |
-            echo "$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/tools:$ANDROID_HOME/platform-tools:$ANDROID_HOME/build-tools/${{ env.ANDROID_BUILD_TOOLS_VERSION }}" >> $GITHUB_PATH
+    # Step 1: Checkout the code
+    - name: Checkout code
+      uses: actions/checkout@v2
 
-      - name: Install Sdk
-        run: |
-           yes Y | sdkmanager --licenses
-           sdkmanager --install ${ANDROID_SDK_PACKAGES}
-  
-      - name: Build emulator
-        run: |
-            echo "no" | avdmanager --verbose create avd --force -n $EMULATOR_NAME --abi "${ANDROID_TARGET}/${ANDROID_ARCH}" -k "system-images;android-${API_LEVEL};${ANDROID_TARGET};${ANDROID_ARCH}"
+    # Step 2: Set up Java (required for Android SDK)
+    - name: Set up JDK 11
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'zulu'
+        java-version: '11'
 
-      - name: Launch emulator
-        run: |
-          chmod +x ./start_emu_headless.sh
-          EMULATOR_TIMEOUT=$EMULATOR_TIMEOUT EMULATOR_NAME=$EMULATOR_NAME ./start_emu_headless.sh
+    # Step 3: Set up the Android SDK
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v2
+      with:
+        api-level: ${{ env.API_LEVEL }}
+        target: ${{ env.TARGET }}
+        arch: ${{ env.ABI }}
+        profile: 'default'
+        emulator-name: ${{ env.EMULATOR_NAME }}
+        force-create: true    # Ensures a fresh emulator instance
+        disable-animations: true
+
+    # Step 4: Start the emulator
+    - name: Start emulator
+      run: |
+        adb start-server
+        emulator -avd $EMULATOR_NAME -no-snapshot -no-window -gpu swiftshader_indirect -no-boot-anim &
+        adb wait-for-device
+        adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done;'
+        adb shell input keyevent 82  # Unlocks the emulator screen
+
+    # Step 5: Install dependencies and build the project
+    - name: Install dependencies and build
+      run: |
+        ./gradlew assembleDebug
+
+    # Step 6: Run tests on the emulator
+    - name: Run UI tests
+      run: |
+        ./gradlew connectedAndroidTest
+
+    # Step 7: Stop the emulator
+    - name: Stop emulator
+      run: |
+        adb emu kill
