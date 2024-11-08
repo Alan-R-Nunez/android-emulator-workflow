@@ -37,5 +37,9 @@ jobs:
           disable-animations: true
 
       - name: Add Android SDK tools to PATH
-        run: echo "$PATH"
+        run: |
+          export ANDROID_HOME=$HOME/android/sdk
+          export PATH=$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/tools/bin
+          mkdir -p $ANDROID_HOME
+
 
